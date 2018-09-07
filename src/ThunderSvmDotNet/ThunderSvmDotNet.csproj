@@ -73,7 +73,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="ThunderSvmDotNet.targets" Pack="true" PackagePath="build" />
+    <None Include="ThunderSvmDotNet.targets" Pack="true" PackagePath="build">
+      <Visible>false</Visible>
+    </None>
   </ItemGroup>
 
 </Project>

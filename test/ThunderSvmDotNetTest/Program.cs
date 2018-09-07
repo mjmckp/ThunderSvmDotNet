@@ -22,6 +22,36 @@ namespace ThunderSvmDotNetTest
             return rowVector;
         }
 
+        internal static SparseMatrix Dense2Sparse(float[,] matrix)
+        {
+            var nnz = 0;
+            for (var i = 0; i < matrix.GetLength(0); i++)
+                for (var j = 0; j < matrix.GetLength(1); j++)
+                    if (matrix[i, j] != 0) nnz++;
+
+            var rslt = new SparseMatrix(matrix.GetLength(0), matrix.GetLength(1), nnz);
+
+            var idx = 0;
+            for (var i = 0; i < matrix.GetLength(0); i++)
+            {
+                rslt.RowExtents[i] = idx;
+                for (var j = 0; j < matrix.GetLength(1); j++)
+                {
+                    if (matrix[i, j] != 0)
+                    {
+                        rslt.Data[idx] = matrix[i, j];
+                        rslt.ColumnIndices[idx] = j;
+                        idx++;
+                    }
+                }
+            }
+            rslt.RowExtents[rslt.RowExtents.Length-1] = idx;
+
+            rslt.Validate();
+
+            return rslt;
+        }
+
         internal static double RandStdNormal(Random rng)
         {
             var u1 = 1.0 - rng.NextDouble();
@@ -50,7 +80,7 @@ namespace ThunderSvmDotNetTest
                         var angle = 2 * Math.PI * rng.NextDouble();
                         data[i, j] = (float)(radius * ((j == 0) ? Math.Cos(angle) : Math.Sin(angle)) + RandNormal(rng, 0, sigma));
                     }
-                    else
+                    else if (rng.Next(20) > 0)  // insert some zeros for sparse test
                         data[i, j] = (float)RandNormal(rng, 0, sigma);
                 }
             }
@@ -88,11 +118,11 @@ namespace ThunderSvmDotNetTest
             var file = Path.GetTempFileName();
             try
             {
-                Console.WriteLine("Model training...");
-                var prms = new Parameter(numFeatures) { Verbose = false };
+                Console.WriteLine("Dense Model training...");
+                var prms = new Parameter(numFeatures) { Verbose = true };
                 using (var model = Model.CreateDense(prms, trainData, trainLabels))
                 {
-                    Console.WriteLine("Model trained.");
+                    Console.WriteLine("Dense Model trained.");
                     if (model.NumClasses != 2) throw (new Exception("Expect 2 classes"));
                     if (model.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
 
@@ -107,7 +137,8 @@ namespace ThunderSvmDotNetTest
                     Console.WriteLine($"Train: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
                     Console.WriteLine($"Test:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
 
-                    for (var i = 0; i < trainCount; i++)
+                    model.Parameter.Verbose = false;
+                    for (var i = 0; i < Math.Min(100,trainCount); i++)
                     {
                         var row = GetRow(trainData, i);
                         var pi = model.PredictDense(row);
@@ -176,6 +207,28 @@ namespace ThunderSvmDotNetTest
 
                     var cmTrain3 = ConfusionMatrix(trainLabels, predTrain3);
                     Console.WriteLine($"Train3: TN {cmTrain3[0, 0]} TP {cmTrain3[1, 1]} FN {cmTrain3[0, 1]} FP {cmTrain3[1, 0]}");
+                }
+
+                // Compare with sparse version
+                Console.WriteLine("Sparse Model training...");
+                var trainDataSparse = Dense2Sparse(trainData);
+                var testDataSparse = Dense2Sparse(testData);
+                using (var model = Model.CreateSparse(prms, trainDataSparse, trainLabels))
+                {
+                    Console.WriteLine("Sparse Model trained.");
+                    if (model.NumClasses != 2) throw (new Exception("Expect 2 classes"));
+                    if (model.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
+
+                    var predTrain = new float[trainCount];
+                    model.PredictSparse(trainDataSparse, predTrain);
+                    var cmTrain = ConfusionMatrix(trainLabels, predTrain);
+
+                    var predTest = new float[testCount];
+                    model.PredictSparse(testDataSparse, predTest);
+                    var cmTest = ConfusionMatrix(testLabels, predTest);
+
+                    Console.WriteLine($"Train: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
+                    Console.WriteLine($"Test:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
                 }
 
                 Console.WriteLine("Done");

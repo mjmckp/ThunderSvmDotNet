@@ -34,7 +34,7 @@ namespace ThunderSvmDotNet
         }
 
         #endregion
-        
+
         #region Properties
 
         /// <summary>
@@ -59,6 +59,36 @@ namespace ThunderSvmDotNet
         public Parameter Parameter
         {
             get; internal set;
+        }
+
+        /// <summary>
+        /// Get the number of support vectors in the trained model.
+        /// </summary>
+        public int NumSupportVectors 
+        {
+            get
+            {
+                if (NativePtr == IntPtr.Zero)
+                    throw (new Exception("Model not initialised"));
+                ThrowIfDisposed();
+                return NativeMethods.n_sv(NativePtr);
+            }
+        }
+
+        /// <summary>
+        /// Get the number of underlying binary models in the trained model.
+        /// </summary>
+        public unsafe int NumBinaryModels
+        {
+            get
+            {
+                if (NativePtr == IntPtr.Zero)
+                    throw (new Exception("Model not initialised"));
+                ThrowIfDisposed();
+                var n_model = 0;
+                NativeMethods.get_n_binary_models(NativePtr, &n_model);
+                return n_model;
+            }
         }
 
         #endregion
@@ -173,6 +203,123 @@ namespace ThunderSvmDotNet
         }
 
         /// <summary>
+        /// Train an SVM model on a dense dataset.
+        /// </summary>
+        /// <param name="prms">Calibration parameters</param>
+        /// <param name="data">Feature vectors (stack as rows)</param>
+        /// <param name="label"></param>
+        /// <returns></returns>
+        public static unsafe Model CreateSparse(Parameter prms, SparseMatrix data, float[] label)
+        {
+            if (data == null)
+                throw (new ArgumentException("Data matrix is null"));
+            data.Validate();
+
+            if (label != null && data.RowCount != label.Length)
+                throw (new ArgumentException("Number of rows in data matrix must match number of labels"));
+
+            if (prms.LengthOfWeight > 0)
+            {
+                if (prms.Weight == null || prms.Weight.Length != prms.LengthOfWeight)
+                    throw (new ArgumentException("LengthOfWeight does not match length of weight array"));
+
+                if (prms.WeightLabel == null || prms.WeightLabel.Length != prms.LengthOfWeight)
+                    throw (new ArgumentException("LengthOfWeight does not match length of weight label array"));
+            }
+
+            var gcHandles = new List<GCHandle>(6);
+
+            var model = new Model(prms.SvmType);
+            try
+            {
+                var dataHdl = GCHandle.Alloc(data.Data, GCHandleType.Pinned);
+                gcHandles.Add(dataHdl);
+                var dataPtr = (float*)dataHdl.AddrOfPinnedObject().ToPointer();
+
+                var rowHdl = GCHandle.Alloc(data.RowExtents, GCHandleType.Pinned);
+                gcHandles.Add(rowHdl);
+                var rowPtr = (int*)rowHdl.AddrOfPinnedObject().ToPointer();
+
+                var colHdl = GCHandle.Alloc(data.ColumnIndices, GCHandleType.Pinned);
+                gcHandles.Add(colHdl);
+                var colPtr = (int*)colHdl.AddrOfPinnedObject().ToPointer();
+
+                float* labelPtr = null;
+                if (label != null)
+                {
+                    var labelHdl = GCHandle.Alloc(label, GCHandleType.Pinned);
+                    gcHandles.Add(labelHdl);
+                    labelPtr = (float*)labelHdl.AddrOfPinnedObject().ToPointer();
+                }
+
+                int* weightLabelPtr = null;
+                float* weightPtr = null;
+                if (prms.LengthOfWeight > 0)
+                {
+                    var weightLabelHdl = GCHandle.Alloc(prms.WeightLabel, GCHandleType.Pinned);
+                    gcHandles.Add(weightLabelHdl);
+                    weightLabelPtr = (int*)weightLabelHdl.AddrOfPinnedObject().ToPointer();
+
+                    var weightHdl = GCHandle.Alloc(prms.Weight, GCHandleType.Pinned);
+                    gcHandles.Add(weightHdl);
+                    weightPtr = (float*)weightHdl.AddrOfPinnedObject().ToPointer();
+                }
+
+                int n_features = 0;
+                int n_classes = 0;
+                int succeed = 0;
+                NativeMethods.sparse_model_scikit(data.RowCount,                // int row_size, 
+                                                  dataPtr,                      // float* val,
+                                                  rowPtr,                       // int * row_ptr
+                                                  colPtr,                       // int * col_ptr
+                                                  labelPtr,                     // float* label,  // length: row_size (can also be null)
+                                                  (int)prms.SvmType,            // int svm_type,
+                                                  (int)prms.KernelType,         // int kernel_type,
+                                                  prms.Degree,                  // int degree,
+                                                  (float)prms.Gamma,            // float gamma,
+                                                  (float)prms.Coef0,            // float coef0,
+                                                  (float)prms.C,                // float cost,       // param_cmd.C = (float_type)cost;
+                                                  (float)prms.Nu,               // float nu,
+                                                  (float)prms.P,                // float epsilon,    // param_cmd.p = (float_type)epsilon;
+                                                  (float)prms.Epsilon,          // float tol,        // param_cmd.epsilon = (float_type)tol;
+                                                  (prms.Probability ? 1 : 0),   // int probability,
+                                                  prms.LengthOfWeight,          // int weight_size,
+                                                  weightLabelPtr,               // int* weight_label, // length: weight_size
+                                                  weightPtr,                    // float* weight,     // length: weight_size
+                                                  (prms.Verbose ? 1 : 0),       // int verbose,
+                                                  prms.MaxIter,                 // int max_iter,
+                                                  prms.NumCores,                // int n_cores,
+                                                  prms.MaxMemSize,              // int max_mem_size,
+                                                  &n_features,                  // int* n_features,
+                                                  &n_classes,                   // int* n_classes,
+                                                  &succeed,                     // int* succeed,  // -1 on error, 1 otherwise
+                                                  model.NativePtr);             // IntPtr model);
+
+                if (succeed != 1)
+                    throw (new Exception("Unspecified error training SVM model"));
+
+                model.NumClasses = n_classes;
+                model.NumFeatures = n_features;
+                model.Parameter = prms;
+
+                return model;
+            }
+            catch
+            {
+                model.Dispose();
+                throw;
+            }
+            finally
+            {
+                foreach (var hdl in gcHandles)
+                {
+                    if (hdl.IsAllocated) hdl.Free();
+                }
+                gcHandles.Clear();
+            }
+        }
+
+        /// <summary>
         /// Calculate predicted labels for each of the given feature vectors.
         /// </summary>
         /// <param name="data">Input features (stacked as rows)</param>
@@ -181,6 +328,7 @@ namespace ThunderSvmDotNet
         {
             if (NativePtr == IntPtr.Zero)
                 throw (new Exception("Model not initialised"));
+            ThrowIfDisposed();
 
             if (data == null)
                 throw (new ArgumentException("Data matrix is null"));
@@ -231,6 +379,7 @@ namespace ThunderSvmDotNet
         {
             if (NativePtr == IntPtr.Zero)
                 throw (new Exception("Model not initialised"));
+            ThrowIfDisposed();
 
             if (data == null)
                 throw (new ArgumentException("Data matrix is null"));
@@ -252,6 +401,46 @@ namespace ThunderSvmDotNet
         }
 
         /// <summary>
+        /// Calculate predicted labels for each of the given feature vectors.
+        /// </summary>
+        /// <param name="data">Input features (stacked as rows)</param>
+        /// <param name="label">Output predicted labels</param>
+        public unsafe void PredictSparse(SparseMatrix data, float[] label)
+        {
+            if (NativePtr == IntPtr.Zero)
+                throw (new Exception("Model not initialised"));
+            ThrowIfDisposed();
+
+            if (data == null)
+                throw (new ArgumentException("Data matrix is null"));
+
+            data.Validate();
+
+            if (label == null)
+                throw (new ArgumentException("Label array is null"));
+
+            if (data.RowCount != label.Length)
+                throw (new ArgumentException("Number of rows in data matrix must match number of labels"));
+
+            if (data.ColumnCount != NumFeatures)
+                throw (new ArgumentException("Number of columns in data matrix must match number of features"));
+
+            fixed(float* dataPtr = data.Data, labelPtr = label)
+            {
+                fixed (int* rowPtr = data.RowExtents, colPtr = data.ColumnIndices)
+                {
+                    NativeMethods.sparse_predict(data.RowCount,                // int row_size, 
+                                                 dataPtr,                      // float* val,
+                                                 rowPtr,                       // int * row_ptr
+                                                 colPtr,                       // int * col_ptr
+                                                 NativePtr,                    // model
+                                                 labelPtr,                     // float* label,  // length: row_size (can also be null)
+                                                 (Parameter.Verbose ? 1 : 0)); // int verbose
+                }
+            }
+        }
+
+        /// <summary>
         /// Export model in format readable by LibSVM
         /// (Use WriteBinary/ReadBinary to persist Model)
         /// </summary>
@@ -269,11 +458,10 @@ namespace ThunderSvmDotNet
         {
             if (NativePtr == IntPtr.Zero)
                 throw (new Exception("Model not initialised"));
+            ThrowIfDisposed();
 
             if (string.IsNullOrWhiteSpace(path))
                 throw new ArgumentException("The specified path is null or whitespace.");
-
-            ThrowIfDisposed();
 
             unsafe
             {
