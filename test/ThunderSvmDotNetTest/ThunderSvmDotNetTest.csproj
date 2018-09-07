@@ -12,6 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="LibSvmDotNet" Version="1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\ThunderSvmDotNet\ThunderSvmDotNet.csproj" />
   </ItemGroup>
 

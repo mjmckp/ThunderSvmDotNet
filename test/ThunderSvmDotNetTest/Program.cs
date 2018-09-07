@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using ThunderSvmDotNet;
 
 namespace ThunderSvmDotNetTest
@@ -72,62 +73,97 @@ namespace ThunderSvmDotNetTest
             var (testData, testLabels) = GenerateData(rng, radius, sigma, testCount, numFeatures);
 
             var file = Path.GetTempFileName();
-
-            Console.WriteLine("Model training...");
-            var prms = new Parameter(numFeatures) { Verbose = true };
-            using (var model = Model.CreateDense(prms, trainData, trainLabels))
+            try
             {
-                Console.WriteLine("Model trained.");
-                if (model.NumClasses != 2) throw (new Exception("Expect 2 classes"));
-                if (model.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
-
-                var predTrain = new float[trainCount];
-                model.PredictDense(trainData, predTrain);
-                var cmTrain = ConfusionMatrix(trainLabels, predTrain);
-
-                var predTest = new float[testCount];
-                model.PredictDense(testData, predTest);
-                var cmTest = ConfusionMatrix(testLabels, predTest);
-
-                Console.WriteLine($"Train: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
-                Console.WriteLine($"Test:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
-
-                using (var stream = File.OpenWrite(file))
+                Console.WriteLine("Model training...");
+                var prms = new Parameter(numFeatures) { Verbose = true };
+                using (var model = Model.CreateDense(prms, trainData, trainLabels))
                 {
-                    using (var writer = new BinaryWriter(stream))
+                    Console.WriteLine("Model trained.");
+                    if (model.NumClasses != 2) throw (new Exception("Expect 2 classes"));
+                    if (model.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
+
+                    var predTrain = new float[trainCount];
+                    model.PredictDense(trainData, predTrain);
+                    var cmTrain = ConfusionMatrix(trainLabels, predTrain);
+
+                    var predTest = new float[testCount];
+                    model.PredictDense(testData, predTest);
+                    var cmTest = ConfusionMatrix(testLabels, predTest);
+
+                    Console.WriteLine($"Train: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
+                    Console.WriteLine($"Test:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
+
+                    using (var stream = File.OpenWrite(file))
                     {
-                        model.WriteBinary(writer);
+                        using (var writer = new BinaryWriter(stream))
+                        {
+                            model.WriteBinary(writer);
+                        }
                     }
                 }
-            }
 
-            Model model2 = null;
-            using (var stream = File.OpenRead(file))
-            {
-                using (var reader = new BinaryReader(stream))
+                // Check that we can persist model to file and back again
+                Model model2 = null;
+                using (var stream = File.OpenRead(file))
                 {
-                    model2 = Model.ReadBinary(reader);
+                    using (var reader = new BinaryReader(stream))
+                    {
+                        model2 = Model.ReadBinary(reader);
+                    }
                 }
+                using (model2)
+                {
+                    if (model2.NumClasses != 2) throw (new Exception("Expect 2 classes"));
+                    if (model2.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
+
+                    var predTrain = new float[trainCount];
+                    model2.PredictDense(trainData, predTrain);
+                    var cmTrain = ConfusionMatrix(trainLabels, predTrain);
+
+                    var predTest = new float[testCount];
+                    model2.PredictDense(testData, predTest);
+                    var cmTest = ConfusionMatrix(testLabels, predTest);
+
+                    Console.WriteLine($"Train2: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
+                    Console.WriteLine($"Test2:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
+
+                    File.Delete(file);
+                    model2.Export(file);
+                }
+
+                // Check that we can export model to file and then load it into a LibSvmDotNet model, and get the same results
+                using (var model3 = LibSvmDotNet.Model.Load(file))
+                {
+                    var trainData3 = new List<LibSvmDotNet.Node[]>(trainCount);
+                    for (var i = 0; i < trainCount; i++)
+                    {
+                        var row = new LibSvmDotNet.Node[numFeatures];
+                        for (var j = 0; j < numFeatures; j++)
+                            row[j] = new LibSvmDotNet.Node() { Index = j, Value = trainData[i, j] };
+                        trainData3.Add(row);
+                    }
+
+                    var predTrain3 = new float[trainCount];
+                    using (var problem = LibSvmDotNet.Problem.FromSequence(trainData3, new double[trainCount]))
+                    {
+                        for(var i=0; i<problem.Length; i++)
+                        {
+                            predTrain3[i] = (float)LibSvmDotNet.LibSvm.Predict(model3, problem.X[i]);
+                        }
+                    }
+
+                    var cmTrain3 = ConfusionMatrix(trainLabels, predTrain3);
+                    Console.WriteLine($"Train3: TN {cmTrain3[0, 0]} TP {cmTrain3[1, 1]} FN {cmTrain3[0, 1]} FP {cmTrain3[1, 0]}");
+                }
+
+                Console.WriteLine("Done");
             }
-            using (model2)
+            finally
             {
-                if (model2.NumClasses != 2) throw (new Exception("Expect 2 classes"));
-                if (model2.NumFeatures != numFeatures) throw (new Exception($"Expect {numFeatures} classes"));
-
-                var predTrain = new float[trainCount];
-                model2.PredictDense(trainData, predTrain);
-                var cmTrain = ConfusionMatrix(trainLabels, predTrain);
-
-                var predTest = new float[testCount];
-                model2.PredictDense(testData, predTest);
-                var cmTest = ConfusionMatrix(testLabels, predTest);
-
-                Console.WriteLine($"Train2: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
-                Console.WriteLine($"Test2:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
-
+                if (File.Exists(file))
+                    File.Delete(file);
             }
-
-            Console.WriteLine("Done");
         }
 
     }
