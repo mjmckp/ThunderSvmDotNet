@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net40;net46</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Authors>mjmckp</Authors>
+    <Description>.NET wrapper for ThunderSVM</Description>
+    <copyright>Copyright 2018</copyright>
+    <Version>1.0.0</Version>
+    <PackageId>ThunderSvmDotNet</PackageId>
+    <Product>ThunderSvm.Net</Product>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <Configurations>Debug;Release</Configurations>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageProjectUrl>https://github.com/mjmckp/ThunderSvmDotNet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mjmckp/ThunderSvmDotNet</RepositoryUrl>
+    <PackageTags>SVM libsvm ThunderSVM machinelearning</PackageTags>
+    <PackageIconUrl>https://github.com/mjmckp/ThunderSvmDotNet/blob/master/nuget/svm128.png?raw=true</PackageIconUrl>
+    <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DocumentationFile>bin\Debug\netstandard2.0\ThunderSvmDotNet.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile>bin\Release\netstandard2.0\ThunderSvmDotNet.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net40' ">
+    <Reference Include="System.Security" />
+    <Reference Include="System.Web" />
+    <Reference Include="System" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net46' ">
+    <Reference Include="System.Security" />
+    <Reference Include="System.Web" />
+    <Reference Include="System" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <PropertyGroup Condition=" '$(TargetFramework)' == 'net40' ">
+    <DefineConstants>$(DefineConstants);DOTNET_FRAMEWORK;net40</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(TargetFramework)' == 'net46' ">
+    <DefineConstants>$(DefineConstants);DOTNET_FRAMEWORK;net46</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">
+    <DefineConstants>$(DefineConstants);netstandard20</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <None Include="..\..\native\Debug\thundersvm.dll" Pack="true" PackagePath="build\x64">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>x64\thundersvm.dll</Link>
+    </None>
+    <None Include="..\..\native\Debug\thundersvm.pdb" Pack="true" PackagePath="build\x64">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>x64\thundersvm.pdb</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <None Include="..\..\native\Release\thundersvm.dll" Pack="true" PackagePath="build\x64">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>x64\thundersvm.dll</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="ThunderSvmDotNet.targets" Pack="true" PackagePath="build" />
+  </ItemGroup>
+
+</Project>
