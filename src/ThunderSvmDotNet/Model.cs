@@ -224,6 +224,34 @@ namespace ThunderSvmDotNet
         }
 
         /// <summary>
+        /// Calculate predicted label for a given feature vector.
+        /// </summary>
+        /// <param name="data">Input features</param>
+        public unsafe float PredictDense(float[] data)
+        {
+            if (NativePtr == IntPtr.Zero)
+                throw (new Exception("Model not initialised"));
+
+            if (data == null)
+                throw (new ArgumentException("Data matrix is null"));
+
+            if (data.Length != NumFeatures)
+                throw (new ArgumentException("Number of columns in data matrix must match number of features"));
+
+            float label = 0;
+            fixed (float *dataPtr = data)
+            {
+                NativeMethods.dense_predict(1,                            // int row_size, 
+                                            data.Length,                  // int features,
+                                            dataPtr,                      // float* data,   // length: row_size * features (row-wise)
+                                            NativePtr,                    // model
+                                            &label,                       // float* label,  // length: row_size (can also be null)
+                                            (Parameter.Verbose ? 1 : 0)); // int verbose
+            }
+            return label;
+        }
+
+        /// <summary>
         /// Export model in format readable by LibSVM
         /// (Use WriteBinary/ReadBinary to persist Model)
         /// </summary>

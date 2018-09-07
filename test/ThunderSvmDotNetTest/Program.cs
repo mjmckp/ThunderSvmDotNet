@@ -8,6 +8,19 @@ namespace ThunderSvmDotNetTest
 
     internal class Program
     {
+        /// <summary>
+        /// Returns the row with number 'row' of this matrix as a 1D-Array.
+        /// </summary>
+        internal static T[] GetRow<T>(T[,] matrix, int row)
+        {
+            var rowLength = matrix.GetLength(1);
+            var rowVector = new T[rowLength];
+
+            for (var i = 0; i < rowLength; i++)
+                rowVector[i] = matrix[row, i];
+
+            return rowVector;
+        }
 
         internal static double RandStdNormal(Random rng)
         {
@@ -76,7 +89,7 @@ namespace ThunderSvmDotNetTest
             try
             {
                 Console.WriteLine("Model training...");
-                var prms = new Parameter(numFeatures) { Verbose = true };
+                var prms = new Parameter(numFeatures) { Verbose = false };
                 using (var model = Model.CreateDense(prms, trainData, trainLabels))
                 {
                     Console.WriteLine("Model trained.");
@@ -93,6 +106,14 @@ namespace ThunderSvmDotNetTest
 
                     Console.WriteLine($"Train: TN {cmTrain[0, 0]} TP {cmTrain[1, 1]} FN {cmTrain[0, 1]} FP {cmTrain[1, 0]}");
                     Console.WriteLine($"Test:  TN {cmTest[0, 0]} TP {cmTest[1, 1]} FN {cmTest[0, 1]} FP {cmTest[1, 0]}");
+
+                    for (var i = 0; i < trainCount; i++)
+                    {
+                        var row = GetRow(trainData, i);
+                        var pi = model.PredictDense(row);
+                        if (pi != predTrain[i])
+                            throw (new Exception($"Predict mismatch: {pi} != {predTrain[i]}"));
+                    }
 
                     using (var stream = File.OpenWrite(file))
                     {
