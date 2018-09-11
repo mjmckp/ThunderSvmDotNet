@@ -6,7 +6,7 @@
 |---|---|
 |LibSvmDotNet|[![NuGet version](https://img.shields.io/nuget/v/ThunderSvmDotNet.svg)](https://www.nuget.org/packages/ThunderSvmDotNet)|
 
-Credits: This library is based on the https://github.com/takuya-takeuchi/LibSvmDotNet by Takuya Takeuchi.
+Credits: This library is based on the [LibSvmDotNet](https://github.com/takuya-takeuchi/LibSvmDotNet) library by Takuya Takeuchi.
 
 ## Dependencies Libraries and Products
 
